@@ -4,7 +4,7 @@ import { WebRTCPage } from './pages/WebRTCPage';
 import './webrtc/js/common/ga';
 
 window.addEventListener('DOMContentLoaded', () => {
-  console.log('0.0.0.5');
+  console.log('0.0.0.6');
   
   // Inject global styles
   if (!document.getElementById('global-styles')) {

@@ -16,11 +16,10 @@ export class WebRTCPage {
       }
     }
 
-    _renderSampleView() {
+    async _renderSampleView() {
       const app = document.getElementById('app');
       app.innerHTML = '';
       
-      // Use flexbox to prevent scrollbars when header is present
       app.style.display = 'flex';
       app.style.flexDirection = 'column';
       app.style.height = '100%';
@@ -30,36 +29,73 @@ export class WebRTCPage {
         backPath: '/webrtc'
       });
       app.appendChild(headerComp.render());
-  
-      const iframe = document.createElement('iframe');
-      iframe.src = this.samplePath;
-      iframe.style.width = '100%';
-      iframe.style.flex = '1'; // Take remaining space
-      iframe.style.border = 'none';
-      iframe.style.display = 'block'; // Remove extra space below iframe
 
-      iframe.onload = () => {
-        try {
-          const doc = iframe.contentDocument || iframe.contentWindow.document;
+      const contentArea = document.createElement('div');
+      contentArea.id = 'sample-content-area';
+      contentArea.style.flex = '1';
+      contentArea.style.overflowY = 'auto';
+      app.appendChild(contentArea);
+
+      try {
+        const response = await fetch(this.samplePath);
+        if (!response.ok) throw new Error(`Failed to fetch sample: ${response.statusText}`);
+        
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        // Resolve base path for relative URLs
+        const basePath = this.samplePath.substring(0, this.samplePath.lastIndexOf('/') + 1);
+
+        // Inject Body Content
+        const bodyContent = doc.body.innerHTML;
+        contentArea.innerHTML = bodyContent;
+
+        // Inject External Scripts (to be executed)
+        const scripts = Array.from(doc.querySelectorAll('script'));
+        for (const script of scripts) {
+          const newScript = document.createElement('script');
           
-          // Inject main.css
-          const link1 = doc.createElement('link');
-          link1.rel = 'stylesheet';
-          link1.href = '/src/webrtc/css/main.css';
-          doc.head.appendChild(link1);
+          // Copy attributes
+          Array.from(script.attributes).forEach(attr => {
+            let value = attr.value;
+            // Resolve relative src
+            if (attr.name === 'src' && !value.startsWith('http') && !value.startsWith('/')) {
+              value = basePath + value;
+            }
+            newScript.setAttribute(attr.name, value);
+          });
 
-          // Inject toggle-target.css
-          const link2 = doc.createElement('link');
-          link2.rel = 'stylesheet';
-          link2.href = '/src/webrtc/css/toggle-target.css';
-          doc.head.appendChild(link2);
+          // Handle inline scripts
+          if (script.innerText) {
+            newScript.innerText = script.innerText;
+          }
 
-        } catch (e) {
-          console.warn('Could not inject styles into iframe (cross-origin or other error):', e);
+          // Append to execute
+          document.body.appendChild(newScript);
+          this.activeScripts = this.activeScripts || [];
+          this.activeScripts.push(newScript);
         }
-      };
 
-      app.appendChild(iframe);
+        // Handle CSS Links
+        const links = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'));
+        links.forEach(link => {
+          const newLink = document.createElement('link');
+          newLink.rel = 'stylesheet';
+          let href = link.getAttribute('href');
+          if (href && !href.startsWith('http') && !href.startsWith('/')) {
+            href = basePath + href;
+          }
+          newLink.href = href;
+          document.head.appendChild(newLink);
+          this.activeStyles = this.activeStyles || [];
+          this.activeStyles.push(newLink);
+        });
+
+      } catch (error) {
+        console.error('Error loading sample:', error);
+        contentArea.innerHTML = `<div style="padding: 20px; color: red;">Error loading sample: ${error.message}</div>`;
+      }
     }
   
     _renderListView() {
@@ -132,5 +168,25 @@ export class WebRTCPage {
       app.appendChild(container);
     }
 
-    unmount() {}
+    unmount() {
+      // Cleanup dynamically added scripts
+      if (this.activeScripts) {
+        this.activeScripts.forEach(script => {
+          if (script.parentNode) {
+            script.parentNode.removeChild(script);
+          }
+        });
+        this.activeScripts = [];
+      }
+
+      // Cleanup dynamically added styles
+      if (this.activeStyles) {
+        this.activeStyles.forEach(style => {
+          if (style.parentNode) {
+            style.parentNode.removeChild(style);
+          }
+        });
+        this.activeStyles = [];
+      }
+    }
 }

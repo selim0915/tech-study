@@ -4,3 +4,5 @@ cert/
 .env
 log/
 $$*
+.homeybuild/
+env.json
